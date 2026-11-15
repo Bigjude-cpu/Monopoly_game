@@ -126,6 +126,18 @@ button{font-family:inherit;cursor:pointer}
 .mrow button{border:0;border-radius:8px;padding:5px 8px;background:#e5dfcc;color:var(--ink);font-weight:800;font-size:12px}
 .pkb{display:block;width:100%;text-align:left;border:0;border-radius:10px;padding:10px 12px;margin:4px 0;background:#e5dfcc;color:var(--ink);font-weight:800;font-size:14px}.pkb:active{background:#d6cfb6}
 
+/* game mode chooser */
+.mode-panel{position:fixed;inset:0;z-index:25;display:grid;place-items:center;padding:18px;background:rgba(3,18,24,.88);backdrop-filter:blur(7px)}
+.mode-card{width:min(440px,100%);background:#fbf6e9;color:#26324a;border:3px solid #fff;border-radius:22px;padding:22px;box-shadow:0 18px 50px #0008}
+.mode-card h1{font:700 32px Fredoka,sans-serif;color:#0e3f45;text-align:center;margin:2px 0 6px}
+.mode-card p{font-size:14px;color:#566174;text-align:center;margin:0 0 18px}
+.mode-choice{width:100%;border:0;border-radius:14px;padding:15px 12px;margin:7px 0;font:700 18px Fredoka,sans-serif;background:linear-gradient(#8fe0b4,#2fa866);color:#073a1f;box-shadow:0 3px 0 #1b7a47}
+.mode-choice.secondary{background:linear-gradient(#ffe08a,#f2b632);color:#3a2600;box-shadow:0 3px 0 #b97a0c}
+.mode-card label{display:block;font-size:13px;font-weight:800;margin:16px 0 6px}
+.mode-card select{width:100%;height:46px;border:1px solid #c8c0a9;border-radius:10px;padding:0 12px;background:#fff;color:#26324a;font:700 16px Nunito,sans-serif}
+.mode-back{width:100%;border:0;border-radius:11px;padding:11px;margin-top:10px;background:#e5dfcc;color:#26324a;font:700 15px Fredoka,sans-serif}
+.mode-hidden{display:none}
+
 /* online multiplayer layer */
 .online-btn{border:0;border-radius:12px;padding:9px 13px;background:linear-gradient(#8fe0b4,#2fa866);color:#073a1f;font:700 14px Fredoka,sans-serif;box-shadow:0 3px 0 #1b7a47}
 .online-panel{position:fixed;inset:0;z-index:30;background:rgba(3,18,24,.78);backdrop-filter:blur(5px);display:none;place-items:center;padding:16px}
@@ -162,6 +174,23 @@ button{font-family:inherit;cursor:pointer}
 <div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
 
 
+<div class="mode-panel" id="modePanel" role="dialog" aria-modal="true" aria-label="Choose game mode">
+ <section class="mode-card">
+  <h1>Mono<span style="color:#f2b632">play</span></h1><p>Choose how you want to play.</p>
+  <div id="modeChoices">
+   <button class="mode-choice" id="chooseOnline">🌐 Online Multiplayer</button>
+   <button class="mode-choice secondary" id="chooseComputer">🤖 Play Against Computer</button>
+  </div>
+  <div id="computerSetup" class="mode-hidden">
+   <h1 style="font-size:25px">Play Against Computer</h1>
+   <p>Play offline against computer opponents. No room code or internet connection needed.</p>
+   <label for="computerCount">Number of computer opponents</label>
+   <select id="computerCount"><option value="1">1 computer · 2 players total</option><option value="2">2 computers · 3 players total</option><option value="3" selected>3 computers · 4 players total</option></select>
+   <button class="mode-choice secondary" id="startComputer">▶ Start game</button>
+   <button class="mode-back" id="backModes">← Back</button>
+  </div>
+ </section>
+</div>
 <div class="online-panel" id="onlinePanel" role="dialog" aria-modal="true" aria-label="Online multiplayer">
  <section class="online-card">
   <button class="online-close" id="onlineClose" aria-label="Close">×</button>
@@ -501,17 +530,30 @@ function next(){
 function humanRoll(){if(G.players[G.turn].human)roll()}
 
 /* ===== Start ===== */
-const resumed=load();
-Board.build();UI.build();Board.refresh();
-G.players.forEach((p,k)=>{Board.place(k);if(p.out)$('#tk'+k).style.display='none'});
-UI.update();
+function initialiseSelectedGame(computerCount){
+  try{localStorage.removeItem(KEY)}catch(e){}
+  const bots=[{n:'Mika',e:'🐙',c:'#2f7fd6'},{n:'Otto',e:'🦉',c:'#2f9e5b'},{n:'Zara',e:'🐢',c:'#8e5bd1'}];
+  G.players=[{n:'You',e:'🦊',c:'#e0443e',human:1},...bots.slice(0,computerCount)]
+    .map(p=>({...p,money:1500,pos:0,props:[],jail:0,out:0,free:0}));
+  G.turn=0;G.busy=false;G.last=7;G.dbl=0;G.owner={};G.houses={};G.mort={};
+  Board.build();UI.build();Board.refresh();G.players.forEach((p,k)=>Board.place(k));UI.update();
+  $('#roll').onclick=humanRoll;
+  $('#manage').onclick=()=>{if(!G.busy&&G.players[G.turn].human)manage()};
+  $('#dice').onclick=humanRoll;
+  $('#modePanel').classList.add('mode-hidden');
+  UI.say('Your turn — roll the dice!');UI.roll(true);
+}
+Board.build();UI.build();Board.refresh();G.players.forEach((p,k)=>Board.place(k));UI.update();
 $('#roll').onclick=humanRoll;
 $('#manage').onclick=()=>{if(!G.busy&&G.players[G.turn].human)manage()};
 $('#dice').onclick=humanRoll;
 $('#mute').onclick=()=>{$('#mute').textContent=Sound.toggle()?'🔊':'🔇'};
 $('#newg').onclick=async()=>{if(await Modal.open(`<div class="deed"><div class="hd" style="--c:#2f4fa8;color:#fff"><small>NEW GAME</small><h3>Start over?</h3></div><div class="bd"><div class="state">Your saved progress will be lost.</div></div></div>`,[{l:'New game',c:'warn',v:1},{l:'Cancel',c:'ghost',v:0}]))reset()};
-if(G.players[G.turn].human){UI.say(resumed?'Welcome back — game restored!':'Your turn — roll the dice!');UI.roll(true)}
-else{UI.roll(false);UI.say(`${G.players[G.turn].n}'s turn`);setTimeout(roll,1200)}
+$('#chooseOnline').onclick=()=>{$('#modePanel').classList.add('mode-hidden');$('#onlinePanel').classList.add('open')};
+$('#chooseComputer').onclick=()=>{$('#modeChoices').classList.add('mode-hidden');$('#computerSetup').classList.remove('mode-hidden')};
+$('#backModes').onclick=()=>{$('#computerSetup').classList.add('mode-hidden');$('#modeChoices').classList.remove('mode-hidden')};
+$('#startComputer').onclick=()=>initialiseSelectedGame(Number($('#computerCount').value));
+$('#onlineClose').addEventListener('click',()=>$('#modePanel').classList.remove('mode-hidden'));
 </script>
 
 <script>
